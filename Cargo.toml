@@ -1,0 +1,15 @@
+[package]
+name = "psy-math"
+version = "0.1.0"
+edition = "2021"
+
+description = "A fork of jet-proto-math. Helpful math utilities, used by PsyLend."
+license = "AGPL-3.0-or-later"
+homepage = "https://www.psyoptions.io"
+repository = "https://github.com/mithraiclabs/psy-math"
+
+[dependencies]
+uint = "0.9"
+thiserror = "1.0.20"
+bytemuck = { version = "1.7", features = ["derive"] }
+static_assertions = "1.1.0"
