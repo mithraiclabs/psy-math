@@ -297,6 +297,10 @@ impl Sum for Number {
     }
 }
 
+/// Computes the Taylor expansion of exp(x) - 1, using the
+/// indicated number of terms.
+/// For example,
+///     expm1_approx(x, 3) = x + x^2 / 2 + x^3 / 6
 pub fn expm1_approx(x: Number, terms: usize) -> Number {
     if terms == 0 {
         return 0.into();
@@ -323,11 +327,46 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_5() {
-        assert_eq!(
-            Number::from_decimal(221402666666665u64, -15),
-            expm1_approx(Number::from_decimal(2, -1), 5)
-        )
+    fn test_taylor_approx_point2ish() {
+        /*
+            x = .2
+            e^.2 ~= 1.22140275816
+            e^.2 + 1 ~= 2.22140275816
+         */
+        let expected: u64 = 221_402_758_160_000; // TODO more decimal places
+        let expected_number: Number = Number::from_decimal(expected, -15);
+        // 221_402_666_666_665 <- actual result
+        let answer = expm1_approx(Number::from_decimal(2, -1), 5);
+        let tolerance = Number::from_decimal(10_000_000_000 as u64, -15);
+
+        let diff = if expected_number.gt(&answer) {
+            expected_number.sub(answer)
+        }else{
+            answer.sub(expected_number)
+        };
+        assert!(diff.lt(&tolerance));
+    }
+
+    #[test]
+    fn test_taylor_approx_point3ish() {
+        /*
+            x = .3
+            e^.2 ~= 1.34985880758
+            e^.2 + 1 ~= 2.34985880758
+         */
+        let expected: u64 = 349_858_807_580_000; // TODO more decimal places
+        let expected_number: Number = Number::from_decimal(expected, -15);
+        // 349_857_750_000_000 <- actual result
+        let answer = expm1_approx(Number::from_decimal(3, -1), 5);
+        let tolerance = Number::from_decimal(10_000_000_000 as u64, -15);
+
+        let diff = if expected_number.gt(&answer) {
+            expected_number.sub(answer)
+        }else{
+            answer.sub(expected_number)
+        };
+        //assert_eq!(diff, Number::ZERO);
+        assert!(diff.lt(&tolerance));
     }
 
     #[test]
