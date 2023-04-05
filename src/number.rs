@@ -408,14 +408,14 @@ mod tests {
 
     #[test]
     fn test_taylor_approx_minish() {
-        let min_x = Number::from_decimal(5 as u64, -15);
+        let min_x = Number::from_decimal(50 as u64, -15);
 
         /*
-            x = 0.000000000000005
-            e^x ~= 1.000000000000010
-            e^x + 1 ~= 2.000000000000010
+            x = 0.00000000000005
+            e^x ~= 1.000000000000050
+            e^x + 1 ~= 2.000000000000050
          */
-        let expected: u64 = 000_000_000_000_010;
+        let expected: u64 = 000_000_000_000_050;
         let expected_number: Number = Number::from_decimal(expected, -15);
         // 000_000_000_000_005 <- actual result
         let answer = expm1_approx(min_x, 5);
@@ -426,7 +426,7 @@ mod tests {
         }else{
             answer.sub(expected_number)
         };
-
+  
         assert!(diff.lt(&tolerance));
     }
 
