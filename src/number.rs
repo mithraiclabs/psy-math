@@ -326,14 +326,24 @@ pub fn expm1_approx(x: Number, terms: usize) -> Number {
 mod tests {
     use super::*;
 
+    // For reference:
+    // const SECONDS_PER_HOUR: u64 = 3600;
+    // const SECONDS_PER_2H: u64 = SECONDS_PER_HOUR * 2;
+    // const SECONDS_PER_12H: u64 = SECONDS_PER_HOUR * 12;
+    // const SECONDS_PER_DAY: u64 = SECONDS_PER_HOUR * 24;
+    // const SECONDS_PER_WEEK: u64 = SECONDS_PER_DAY * 7;
+    // //Note: 365 days, does not account for leap-days
+    // const SECONDS_PER_YEAR: u64 = 31_536_000;
+    // const MAX_ACCRUAL_SECONDS: u64 = SECONDS_PER_WEEK;
+
     #[test]
     fn test_taylor_approx_point2ish() {
         /*
             x = .2
-            e^.2 ~= 1.22140275816
-            e^.2 + 1 ~= 2.22140275816
+            e^.2 ~= 1.221402758160170
+            e^.2 + 1 ~= 2.221402758160170
          */
-        let expected: u64 = 221_402_758_160_000; // TODO more decimal places
+        let expected: u64 = 221_402_758_160_170;
         let expected_number: Number = Number::from_decimal(expected, -15);
         // 221_402_666_666_665 <- actual result
         let answer = expm1_approx(Number::from_decimal(2, -1), 5);
@@ -351,10 +361,10 @@ mod tests {
     fn test_taylor_approx_point3ish() {
         /*
             x = .3
-            e^.2 ~= 1.34985880758
-            e^.2 + 1 ~= 2.34985880758
+            e^.2 ~= 1.349858807576000
+            e^.2 + 1 ~= 2.349858807576000
          */
-        let expected: u64 = 349_858_807_580_000; // TODO more decimal places
+        let expected: u64 = 349_858_807_576_000;
         let expected_number: Number = Number::from_decimal(expected, -15);
         // 349_857_750_000_000 <- actual result
         let answer = expm1_approx(Number::from_decimal(3, -1), 5);
@@ -365,9 +375,61 @@ mod tests {
         }else{
             answer.sub(expected_number)
         };
-        //assert_eq!(diff, Number::ZERO);
+        
         assert!(diff.lt(&tolerance));
     }
+
+    #[test]
+    fn test_taylor_approx_maxish() {
+        // assuming a max rate of 400%
+        // max_rate * seconds_per_week / seconds_per_year = 4 * 604800 / 31536000 
+        //    = 0.076712328767123 = 76712328767123 * 10^-15
+        let max_x = Number::from_decimal(76712328767123 as u64, -15);
+
+        /*
+            x = .076712328767123
+            e^x ~= 1.079731424041940
+            e^x + 1 ~= 2.079731424041940
+         */
+        let expected: u64 = 079_731_424_041_940;
+        let expected_number: Number = Number::from_decimal(expected, -15);
+        // 079_731_423_755_760 <- actual result
+        let answer = expm1_approx(max_x, 5);
+        let tolerance = Number::from_decimal(10_000_000_000 as u64, -15);
+
+        let diff = if expected_number.gt(&answer) {
+            expected_number.sub(answer)
+        }else{
+            answer.sub(expected_number)
+        };
+
+        assert!(diff.lt(&tolerance));
+    }
+
+    #[test]
+    fn test_taylor_approx_minish() {
+        let min_x = Number::from_decimal(5 as u64, -15);
+
+        /*
+            x = 0.000000000000005
+            e^x ~= 1.000000000000010
+            e^x + 1 ~= 2.000000000000010
+         */
+        let expected: u64 = 000_000_000_000_010;
+        let expected_number: Number = Number::from_decimal(expected, -15);
+        // 000_000_000_000_005 <- actual result
+        let answer = expm1_approx(min_x, 5);
+        let tolerance = Number::from_decimal(100 as u64, -15);
+
+        let diff = if expected_number.gt(&answer) {
+            expected_number.sub(answer)
+        }else{
+            answer.sub(expected_number)
+        };
+
+        assert!(diff.lt(&tolerance));
+    }
+
 
     #[test]
     fn zero_equals_zero() {
