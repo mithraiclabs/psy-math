@@ -341,7 +341,7 @@ mod tests {
         /*
             x = .2
             e^.2 ~= 1.221402758160170
-            e^.2 + 1 ~= 2.221402758160170
+            e^.2 - 1 ~= 0.221402758160170
          */
         let expected: u64 = 221_402_758_160_170;
         let expected_number: Number = Number::from_decimal(expected, -15);
@@ -361,8 +361,8 @@ mod tests {
     fn test_taylor_approx_point3ish() {
         /*
             x = .3
-            e^.2 ~= 1.349858807576000
-            e^.2 + 1 ~= 2.349858807576000
+            e^.3 ~= 1.349858807576000
+            e^.3 - 1 ~= 0.349858807576000
          */
         let expected: u64 = 349_858_807_576_000;
         let expected_number: Number = Number::from_decimal(expected, -15);
@@ -389,7 +389,7 @@ mod tests {
         /*
             x = .076712328767123
             e^x ~= 1.079731424041940
-            e^x + 1 ~= 2.079731424041940
+            e^x - 1 ~= 0.079731424041940
          */
         let expected: u64 = 079_731_424_041_940;
         let expected_number: Number = Number::from_decimal(expected, -15);
@@ -413,11 +413,11 @@ mod tests {
         /*
             x = 0.00000000000005
             e^x ~= 1.000000000000050
-            e^x + 1 ~= 2.000000000000050
+            e^x - 1 ~= 0.000000000000050
          */
         let expected: u64 = 000_000_000_000_050;
         let expected_number: Number = Number::from_decimal(expected, -15);
-        // 000_000_000_000_005 <- actual result
+        // 000_000_000_000_050 <- actual result
         let answer = expm1_approx(min_x, 5);
         let tolerance = Number::from_decimal(100 as u64, -15);
 
