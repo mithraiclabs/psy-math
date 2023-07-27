@@ -1,4 +1,4 @@
-//! Yet another decimal library
+//! Yet another decimal library. Tracking jet-proto-math 1.0.0
 
 use std::{
     iter::Sum,
@@ -339,10 +339,10 @@ mod tests {
     #[test]
     fn test_taylor_approx_point2ish() {
         /*
-            x = .2
-            e^.2 ~= 1.221402758160170
-            e^.2 - 1 ~= 0.221402758160170
-         */
+           x = .2
+           e^.2 ~= 1.221402758160170
+           e^.2 - 1 ~= 0.221402758160170
+        */
         let expected: u64 = 221_402_758_160_170;
         let expected_number: Number = Number::from_decimal(expected, -15);
         // 221_402_666_666_665 <- actual result
@@ -351,7 +351,7 @@ mod tests {
 
         let diff = if expected_number.gt(&answer) {
             expected_number.sub(answer)
-        }else{
+        } else {
             answer.sub(expected_number)
         };
         assert!(diff.lt(&tolerance));
@@ -360,10 +360,10 @@ mod tests {
     #[test]
     fn test_taylor_approx_point3ish() {
         /*
-            x = .3
-            e^.3 ~= 1.349858807576000
-            e^.3 - 1 ~= 0.349858807576000
-         */
+           x = .3
+           e^.3 ~= 1.349858807576000
+           e^.3 - 1 ~= 0.349858807576000
+        */
         let expected: u64 = 349_858_807_576_000;
         let expected_number: Number = Number::from_decimal(expected, -15);
         // 349_857_750_000_000 <- actual result
@@ -372,25 +372,25 @@ mod tests {
 
         let diff = if expected_number.gt(&answer) {
             expected_number.sub(answer)
-        }else{
+        } else {
             answer.sub(expected_number)
         };
-        
+
         assert!(diff.lt(&tolerance));
     }
 
     #[test]
     fn test_taylor_approx_maxish() {
         // assuming a max rate of 400%
-        // max_rate * seconds_per_week / seconds_per_year = 4 * 604800 / 31536000 
+        // max_rate * seconds_per_week / seconds_per_year = 4 * 604800 / 31536000
         //    = 0.076712328767123 = 76712328767123 * 10^-15
         let max_x = Number::from_decimal(76712328767123 as u64, -15);
 
         /*
-            x = .076712328767123
-            e^x ~= 1.079731424041940
-            e^x - 1 ~= 0.079731424041940
-         */
+           x = .076712328767123
+           e^x ~= 1.079731424041940
+           e^x - 1 ~= 0.079731424041940
+        */
         let expected: u64 = 079_731_424_041_940;
         let expected_number: Number = Number::from_decimal(expected, -15);
         // 079_731_423_755_760 <- actual result
@@ -399,7 +399,7 @@ mod tests {
 
         let diff = if expected_number.gt(&answer) {
             expected_number.sub(answer)
-        }else{
+        } else {
             answer.sub(expected_number)
         };
 
@@ -411,10 +411,10 @@ mod tests {
         let min_x = Number::from_decimal(50 as u64, -15);
 
         /*
-            x = 0.00000000000005
-            e^x ~= 1.000000000000050
-            e^x - 1 ~= 0.000000000000050
-         */
+           x = 0.00000000000005
+           e^x ~= 1.000000000000050
+           e^x - 1 ~= 0.000000000000050
+        */
         let expected: u64 = 000_000_000_000_050;
         let expected_number: Number = Number::from_decimal(expected, -15);
         // 000_000_000_000_050 <- actual result
@@ -423,13 +423,12 @@ mod tests {
 
         let diff = if expected_number.gt(&answer) {
             expected_number.sub(answer)
-        }else{
+        } else {
             answer.sub(expected_number)
         };
-  
+
         assert!(diff.lt(&tolerance));
     }
-
 
     #[test]
     fn zero_equals_zero() {
