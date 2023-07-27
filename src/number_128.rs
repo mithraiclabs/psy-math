@@ -173,13 +173,15 @@ impl Mul<Number128> for Number128 {
     type Output = Number128;
 
     fn mul(self, rhs: Number128) -> Self::Output {
-        Self(self.0.checked_mul(rhs.0).unwrap().checked_div(ONE).unwrap())
+        // Product is divided by ONE to as RHS is also a fixed point number.
+        Self(div_by_one(fast_checked_mul(self.0, rhs.0).unwrap()))
     }
 }
 
 impl MulAssign<Number128> for Number128 {
     fn mul_assign(&mut self, rhs: Number128) {
-        self.0 = self.0.checked_mul(rhs.0).unwrap().checked_div(ONE).unwrap();
+        // Product is divided by ONE to as RHS is also a fixed point number.
+        self.0 = div_by_one(fast_checked_mul(self.0, rhs.0).unwrap())
     }
 }
 
@@ -187,13 +189,18 @@ impl Div<Number128> for Number128 {
     type Output = Number128;
 
     fn div(self, rhs: Number128) -> Self::Output {
-        Self(self.0.checked_mul(ONE).unwrap().checked_div(rhs.0).unwrap())
+        // Both div and checked_div panic on overflow or zero division,
+        // so we use div directly.
+        // print!("div: {} / {} = ", mul_by_one(self.0), rhs.0);
+        Self(mul_by_one(self.0).div(rhs.0))
     }
 }
 
 impl DivAssign<Number128> for Number128 {
     fn div_assign(&mut self, rhs: Number128) {
-        self.0 = self.0.checked_mul(ONE).unwrap().checked_div(rhs.0).unwrap();
+        // Both div and checked_div panic on overflow or zero division,
+        // so we use div directly.
+        self.0 = mul_by_one(self.0).div(rhs.0);
     }
 }
 
@@ -201,7 +208,7 @@ impl<T: Into<i128>> Mul<T> for Number128 {
     type Output = Number128;
 
     fn mul(self, rhs: T) -> Self::Output {
-        Self(self.0.checked_mul(rhs.into()).unwrap())
+        Self(fast_checked_mul(self.0, rhs.into()).unwrap())
     }
 }
 
@@ -209,7 +216,9 @@ impl<T: Into<i128>> Div<T> for Number128 {
     type Output = Number128;
 
     fn div(self, rhs: T) -> Self::Output {
-        Self(self.0.checked_div(rhs.into()).unwrap())
+        // Both div and checked_div panic on overflow or zero division,
+        // so we use div directly.
+        Self(self.0.div(rhs.into()))
     }
 }
 
@@ -219,13 +228,57 @@ impl<T: Into<i128>> From<T> for Number128 {
     }
 }
 
-
 impl Neg for Number128 {
     type Output = Number128;
 
     fn neg(self) -> Self::Output {
         Number128(-self.0)
     }
+}
+
+// Divides value by ONE, which is 10_000_000_000 i128.
+// This is implemented as a right bit-shift by 10, followed by a division by 9_765_625,
+// as this is faster than a division by 10_000_000_000.
+fn div_by_one(value: i128) -> i128 {
+    (value >> 10) / (9_765_625_i128)
+}
+
+// Multiplies value by ONE, which is 10_000_000_000 i128.
+// This is implemented as multiplication by 9_765_625, followed by a left bit-shift by 10,
+// as this is faster than a multiplication by 10_000_000_000.
+const ONE_REPR_BITS: u32 = 34; // bits needed to represent ONE (excluding sign bit)
+
+fn mul_by_one(value: i128) -> i128 {
+    // Check that sum of bits required to represent product does not exceed
+    // 128 bits. This is a conservative estimate, so it may return false positives
+    let left_bits = 128 - value.abs().leading_zeros();
+    if (left_bits + ONE_REPR_BITS + 1) > 128 {
+        panic!("Overflow in mul by one")
+    }
+  (value * 9_765_625_i128) << 10
+}
+
+// Checks if the multiplication of two i128 values will overflow, This is 
+// a conservative estimate, so it may return false positives
+// (detecting overflow when there is none).
+fn fast_checked_mul(left: i128, right: i128) -> Option<i128> {
+  if right == 0 || left == 0 {
+    return Some(0);
+  }
+
+  // Convert values to positive first, as negative value always have no leading zeros.
+  // Gets bits required to represent the absolute value, excluding the sign bit.
+  let left_bits = 128 - left.abs().leading_zeros();
+  let right_bits = 128 - right.abs().leading_zeros();
+
+  // Assume that a conservative case that both right and left value have 
+  // ones for left_bits and right_bits respectively. Therefore, the product
+  // of the two values will require left_bits + right_bits bits to represent,
+  // plus one sign bit.z
+  if (left_bits + right_bits + 1) > 128 {
+      return None;
+  }
+  Some(left * right)
 }
 
 #[cfg(test)]
@@ -462,4 +515,81 @@ mod tests {
 
         assert_eq!(Number128::from_decimal(1242, -3), number);
     }
-}
+
+    #[test]
+    fn mul_overflow() {
+        let x = Number128::from_decimal(u64::MAX, 0);
+        assert!(std::panic::catch_unwind(|| x * x).is_err());
+        let x = Number128::from_i128(i128::MIN);
+        let y = Number128::from_i128(2);
+        assert!(std::panic::catch_unwind(|| x * y).is_err());
+    }
+
+    #[test]
+    fn mul_assign_overflow() {
+        let mut x = Number128::from_decimal(u64::MAX, 0);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            x *= x;
+        }));
+        assert!(result.is_err());
+
+        let mut x = Number128::from_i128(i128::MIN);
+        let y = Number128::from_i128(2);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            x *= y;
+        }));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn div_overflow() {
+        let x = Number128::from_decimal(u64::MAX, 0);
+        assert!(std::panic::catch_unwind(|| x / x).is_err());
+        let x = Number128::from_i128(i128::MIN);
+        assert!(std::panic::catch_unwind(|| x / -1).is_err());
+        assert!(std::panic::catch_unwind(|| x / 0).is_err());
+    }
+
+    #[test]
+    fn div_assign_overflow() {
+        let mut x = Number128::from_decimal(u64::MAX, 0);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            x /= x;
+        }));
+        assert!(result.is_err());
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            x /= Number128::from_i128(-1);
+        }));
+        assert!(result.is_err());
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            x /= Number128::from_i128(0);
+        }));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn div_into_overflow() {
+        let x = Number128::from_i128(i128::MIN);
+        assert!(std::panic::catch_unwind(|| x / -1).is_err());
+        assert!(std::panic::catch_unwind(|| x / 0).is_err());
+    }
+
+    #[test]
+    fn test_div_by_one() {
+        // Expect division of number smaller than ONE to be zero
+        let x = Number128::ONE - Number128::from_i128(1);
+        assert_eq!(div_by_one(x.0), 0);
+
+        let x = Number128::from_i128(1);
+        assert_eq!(div_by_one(x.0), 0);
+
+        // Expect fractional value to be rounded down.
+        let x = Number128::ONE + Number128::from_i128(1);
+        assert_eq!(div_by_one(x.0), 1);
+
+        let x = -Number128::ONE;
+        assert_eq!(div_by_one(x.0), -1);
+    }
+  }
