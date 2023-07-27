@@ -236,10 +236,12 @@ impl Neg for Number128 {
     }
 }
 
-// Divides value by ONE, which is 10_000_000_000 i128.  This is implemented
-// as a right bit-shift (on absolute value) by 10, followed by a division by
-// 9_765_625, as this is faster than a division by 10_000_000_000.
-// The sign is then restored before returning the result.
+/// Divides value by ONE, which is `10_000_000_000_i128`. This is implemented
+/// as a right bit-shift (on absolute value) by 10, followed by a division by
+/// `9_765_625` (which is `5^10`), as this is faster than a division by `10_000_000_000`.
+/// The sign is then restored before returning the result.
+///
+/// Works for all i128 inputs except `i128::MIN`
 fn div_by_one(value: i128) -> i128 {
     let abs_value = (value.abs() >> 10) / (9_765_625_i128);
     if value < 0 {
@@ -249,11 +251,15 @@ fn div_by_one(value: i128) -> i128 {
     }
 }
 
-// Multiplies value by ONE, which is 10_000_000_000 i128.
-// This is implemented as multiplication by 9_765_625, followed by a left bit-shift by 10,
-// as this is faster than a multiplication by 10_000_000_000.
 const ONE_REPR_BITS: u32 = 34; // bits needed to represent ONE (excluding sign bit)
 
+/// Multiplies value by ONE, which is `10_000_000_000_i128`.
+/// This is implemented as multiplication by `9_765_625` (which is `5^10`), followed by
+/// a left bit-shift by 10, as this is faster than a multiplication by `10_000_000_000`.
+///
+/// Largest supported input: `i128::MAX >> 34 = 2^93 ~= 9.9^27`
+///
+/// Smallest supported input: `i128::MIN >> 35 = -2^93 ~= -9.9^27`
 fn mul_by_one(value: i128) -> i128 {
     // Check that sum of bits required to represent product does not exceed
     // 128 bits. This is a conservative estimate, so it may return false positives
@@ -264,9 +270,9 @@ fn mul_by_one(value: i128) -> i128 {
     (value * 9_765_625_i128) << 10
 }
 
-// Checks if the multiplication of two i128 values will overflow, This is
-// a conservative estimate, so it may return false positives
-// (detecting overflow when there is none).
+/// Checks if the multiplication of two i128 values will overflow, This is
+/// a conservative estimate, so it may return false positives
+/// (detecting overflow when there is none).
 fn fast_checked_mul(left: i128, right: i128) -> Option<i128> {
     if right == 0 || left == 0 {
         return Some(0);
@@ -367,6 +373,32 @@ mod tests {
         assert_eq!(mul_by_one(-10_000_000_001_i128), -10_000_000_001_i128 * one);
         assert_eq!(mul_by_one(123_456_000_000_000), 123_456_000_000_000 * one);
         assert_eq!(mul_by_one(-123_456_000_000_000), -123_456_000_000_000 * one);
+
+        // The largest supported value is an i128 where the first 33 bits following
+        // the sign bit are 0 (i128::MAX >> 34)
+        let big_value = i128::MAX >> 34;
+        assert_eq!(mul_by_one(big_value), (big_value) * one);
+        // The smallest supported value is similar, except one more bit is needed.
+        let small_value = i128::MIN >> 35;
+        assert_eq!(mul_by_one(small_value), (small_value) * one);
+    }
+
+    #[test]
+    #[should_panic = "Overflow in mul by one"]
+    fn test_mul_by_one_overflow_high() {
+        let one = 10_000_000_000_i128;
+        let big_value = i128::MAX >> 33;
+        let answer = mul_by_one(big_value);
+        assert_eq!(answer, big_value* one);
+    }
+
+    #[test]
+    #[should_panic = "Overflow in mul by one"]
+    fn test_mul_by_one_overflow_low() {
+        let one = 10_000_000_000_i128;
+        let small_value = i128::MIN >> 34;
+        let answer = mul_by_one(small_value);
+        assert_eq!(answer, small_value* one);
     }
 
     #[test]
@@ -389,6 +421,19 @@ mod tests {
         assert_eq!(div_by_one(-10_000_000_001_i128), -10_000_000_001_i128 / one);
         assert_eq!(div_by_one(123_456_000_000_000), 123_456_000_000_000 / one);
         assert_eq!(div_by_one(-123_456_000_000_000), -123_456_000_000_000 / one);
+
+        // No overflow on MAX value, or values down to MIN + 1
+        assert_eq!(div_by_one(i128::MAX), i128::MAX / one);
+        assert_eq!(div_by_one(i128::MIN + 1), (i128::MIN + 1) / one);
+    }
+
+    // Abs of i128::MIN panics
+    #[test]
+    #[should_panic = "attempt to negate with overflow"]
+    fn test_div_by_one_overflow() {
+        let one = 10_000_000_000_i128;
+        let answer = div_by_one(i128::MIN);
+        assert_eq!(answer, i128::MIN / one);
     }
 
     #[test]
