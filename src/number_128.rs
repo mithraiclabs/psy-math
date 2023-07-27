@@ -389,7 +389,7 @@ mod tests {
         let one = 10_000_000_000_i128;
         let big_value = i128::MAX >> 33;
         let answer = mul_by_one(big_value);
-        assert_eq!(answer, big_value* one);
+        assert_eq!(answer, big_value * one);
     }
 
     #[test]
@@ -398,7 +398,7 @@ mod tests {
         let one = 10_000_000_000_i128;
         let small_value = i128::MIN >> 34;
         let answer = mul_by_one(small_value);
-        assert_eq!(answer, small_value* one);
+        assert_eq!(answer, small_value * one);
     }
 
     #[test]
@@ -434,6 +434,59 @@ mod tests {
         let one = 10_000_000_000_i128;
         let answer = div_by_one(i128::MIN);
         assert_eq!(answer, i128::MIN / one);
+    }
+
+    #[test]
+    fn test_fast_checked_mul() {
+        let test_cases = [
+            (10, 10),
+            (0, 10),
+            (10, 0),
+            (-10, 10),
+            (10, -10),
+            (-10, -10),
+            (1_000_000, 1_000_000),
+            (2_000_000, 2_000_000),
+            (i128::MAX >> 1, 1),
+            (i128::MAX >> 2, 2),
+            (3_000_000_000, 3_000_000_000), // both overflow
+            (i128::MAX, 2),                 // both overflow
+        ];
+
+        for &(left, right) in &test_cases {
+            let answer = fast_checked_mul(left, right);
+            let expected = left.checked_mul(right);
+            assert_eq!(answer, expected);
+        }
+    }
+
+    #[test]
+    fn test_fast_checked_failures() {
+        let test_cases = [
+            (i128::MAX, 1), // only fast mul overflows
+            (i128::MAX >> 1, 2), // only fast mul overflows
+            (i128::MAX >> 2, 4), // only fast mul overflows
+            (i128::MAX >> 3, 8), // only fast mul overflows
+            // ... etc
+            (i128::MIN + 1, 1), // only fast mul overflows
+        ];
+
+        for &(left, right) in &test_cases {
+            let answer = fast_checked_mul(left, right);
+            let expected = left.checked_mul(right);
+            assert_ne!(answer, expected);
+        }
+    }
+
+    // Abs of i128::MIN panics
+    #[test]
+    #[should_panic = "attempt to negate with overflow"]
+    fn test_fast_checked_mul_panics() {
+        let left = -1;
+        let right = i128::MIN;
+        let answer = fast_checked_mul(left, right);
+        let expected = left.checked_mul(right);
+        assert_eq!(answer, expected);
     }
 
     #[test]
