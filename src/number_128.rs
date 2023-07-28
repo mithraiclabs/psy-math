@@ -240,15 +240,14 @@ impl Neg for Number128 {
 /// as a right bit-shift (on absolute value) by 10, followed by a division by
 /// `9_765_625` (which is `5^10`), as this is faster than a division by `10_000_000_000`.
 /// The sign is then restored before returning the result.
-///
-/// Works for all i128 inputs except `i128::MIN`
 fn div_by_one(value: i128) -> i128 {
     // abs_result is expected to be positive unless
     // value.abs() has overflowed when value == i128::MIN
     let abs_result = (value.abs() >> 10) / (9_765_625_i128);
 
     // Return result with sign of value.
-    // For abs_result < 0, return result without sign bit change.
+    // For abs_result < 0, when value == i128::MIN, abs_result is the correct value
+    // without any sign change.
     if value > 0 || abs_result < 0 {
         abs_result
     } else {
