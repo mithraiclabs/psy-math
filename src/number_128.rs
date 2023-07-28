@@ -463,7 +463,7 @@ mod tests {
     #[test]
     fn test_fast_checked_failures() {
         // Test cases when fast_checked_mul detects false positives
-        //  and expects overflow, even when checked_mul does not.
+        // and expects overflow, even when checked_mul does not.
         let test_cases = [
             (i128::MAX, 1),
             (i128::MAX >> 1, 2),
