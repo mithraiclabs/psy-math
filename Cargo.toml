@@ -1,6 +1,6 @@
 [package]
 name = "psy-math"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 
 description = "A fork of jet-proto-math. Helpful math utilities, used by PsyLend."

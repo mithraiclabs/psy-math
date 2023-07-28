@@ -117,7 +117,7 @@ impl std::fmt::Display for Number128 {
         let rem = self.0 % ONE;
         let decimal_digits = PRECISION as usize;
         // convert to abs to remove sign
-        let rem_str = rem.abs().to_string();
+        let rem_str = rem.checked_abs().unwrap().to_string();
         // regular padding like {:010} doesn't work with i128
         let decimals = "0".repeat(decimal_digits - rem_str.len()) + &*rem_str;
         let stripped_decimals = decimals.trim_end_matches('0');
@@ -243,7 +243,7 @@ impl Neg for Number128 {
 ///
 /// Works for all i128 inputs except `i128::MIN`
 fn div_by_one(value: i128) -> i128 {
-    let abs_value = (value.abs() >> 10) / (9_765_625_i128);
+    let abs_value = (value.checked_abs().unwrap() >> 10) / (9_765_625_i128);
     if value < 0 {
         -abs_value
     } else {
@@ -263,7 +263,7 @@ const ONE_REPR_BITS: u32 = 34; // bits needed to represent ONE (excluding sign b
 fn mul_by_one(value: i128) -> i128 {
     // Check that sum of bits required to represent product does not exceed
     // 128 bits. This is a conservative estimate, so it may return false positives
-    let left_bits = 128 - value.abs().leading_zeros();
+    let left_bits = 128 - value.checked_abs().unwrap().leading_zeros();
     if (left_bits + ONE_REPR_BITS + 1) > 128 {
         panic!("Overflow in mul by one")
     }
@@ -280,8 +280,8 @@ fn fast_checked_mul(left: i128, right: i128) -> Option<i128> {
 
     // Convert values to positive first, as negative value always have no leading zeros.
     // Gets bits required to represent the absolute value, excluding the sign bit.
-    let left_bits = 128 - left.abs().leading_zeros();
-    let right_bits = 128 - right.abs().leading_zeros();
+    let left_bits = 128 - left.checked_abs().unwrap().leading_zeros();
+    let right_bits = 128 - right.checked_abs().unwrap().leading_zeros();
 
     // Assume that a conservative case that both right and left value have
     // ones for left_bits and right_bits respectively. Therefore, the product
@@ -429,7 +429,7 @@ mod tests {
 
     // Abs of i128::MIN panics
     #[test]
-    #[should_panic = "attempt to negate with overflow"]
+    #[should_panic = "called `Option::unwrap()` on a `None` value"]
     fn test_div_by_one_overflow() {
         let one = 10_000_000_000_i128;
         let answer = div_by_one(i128::MIN);
@@ -462,13 +462,14 @@ mod tests {
 
     #[test]
     fn test_fast_checked_failures() {
+        // Test cases when fast_checked_mul detects false positives
+        //  and expects overflow, even when checked_mul does not.
         let test_cases = [
-            (i128::MAX, 1), // only fast mul overflows
-            (i128::MAX >> 1, 2), // only fast mul overflows
-            (i128::MAX >> 2, 4), // only fast mul overflows
-            (i128::MAX >> 3, 8), // only fast mul overflows
-            // ... etc
-            (i128::MIN + 1, 1), // only fast mul overflows
+            (i128::MAX, 1),
+            (i128::MAX >> 1, 2),
+            (i128::MAX >> 2, 4),
+            (i128::MAX >> 3, 8),
+            (i128::MIN + 1, 1),
         ];
 
         for &(left, right) in &test_cases {
@@ -480,7 +481,7 @@ mod tests {
 
     // Abs of i128::MIN panics
     #[test]
-    #[should_panic = "attempt to negate with overflow"]
+    #[should_panic = "called `Option::unwrap()` on a `None` value"]
     fn test_fast_checked_mul_panics() {
         let left = -1;
         let right = i128::MIN;
