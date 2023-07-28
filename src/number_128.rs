@@ -271,7 +271,7 @@ fn mul_by_one(value: i128) -> i128 {
     // 128 bits. This is a conservative estimate, so it may return false positives.
     // Note that checked_abs is not used here, since the overflow case would
     // be caught by the following check.
-    let left_bits = 128 -  value.abs().leading_zeros();
+    let left_bits = 128 - value.abs().leading_zeros();
     if (left_bits + ONE_REPR_BITS + 1) > 128 {
         panic!("Overflow in mul by one")
     }
