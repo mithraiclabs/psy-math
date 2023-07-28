@@ -243,17 +243,16 @@ impl Neg for Number128 {
 ///
 /// Works for all i128 inputs except `i128::MIN`
 fn div_by_one(value: i128) -> i128 {
-    let abs_value = value.abs();
-    // Checks if value if -1 after bit-shift of 127, indicating negative value after abs,
-    // and that overflow has occurred.
-    if (abs_value >> 127) == -1 {
-        panic!("overflow on abs operation")
-    }
-    let abs_result = (abs_value >> 10) / (9_765_625_i128);
-    if value < 0 {
-        -abs_result
-    } else {
+    // abs_result is expected to be positive unless
+    // value.abs() has overflowed when value == i128::MIN
+    let abs_result = (value.abs() >> 10) / (9_765_625_i128);
+
+    // Return result with sign of value.
+    // For abs_result < 0, return result without sign bit change.
+    if value > 0 || abs_result < 0 {
         abs_result
+    } else {
+        -abs_result
     }
 }
 
@@ -288,7 +287,7 @@ fn fast_checked_mul(left: i128, right: i128) -> Option<i128> {
 
     // Convert values to positive first, as negative value always have no leading zeros.
     // Gets bits required to represent the absolute value, excluding the sign bit.
-    // Note that checked_abs is not used here, since the overflow case (for i128::MIN) 
+    // Note that checked_abs is not used here, since the overflow case (for i128::MIN)
     // would be caught by the following bit check.
     let left_bits = 128 - left.abs().leading_zeros();
     let right_bits = 128 - right.abs().leading_zeros();
@@ -423,34 +422,46 @@ mod tests {
         let one = 10_000_000_000_i128;
 
         // Division of ONE or -ONE by ONE
-        assert_eq!(div_by_one(one), one / one);
-        assert_eq!(div_by_one(-one), -one / one);
+        assert_eq!(div_by_one(one), one.checked_div(one).unwrap());
+        assert_eq!(div_by_one(-one), -one.checked_div(one).unwrap());
 
         // Division of (abs) values smaller than ONE by ONE.
-        assert_eq!(div_by_one(9_999_999_999_i128), 9_999_999_999_i128 / one);
-        assert_eq!(div_by_one(1), 1 / one);
+        assert_eq!(
+            div_by_one(9_999_999_999_i128),
+            9_999_999_999_i128.checked_div(one).unwrap()
+        );
+        assert_eq!(div_by_one(1), 1_i128.checked_div(one).unwrap());
         assert_eq!(div_by_one(0), 0);
-        assert_eq!(div_by_one(-1), -1 / one);
-        assert_eq!(div_by_one(-9_999_999_999_i128), -9_999_999_999_i128 / one);
+        assert_eq!(div_by_one(-1), -1_i128.checked_div(one).unwrap());
+        assert_eq!(
+            div_by_one(-9_999_999_999_i128),
+            -9_999_999_999_i128.checked_div(one).unwrap()
+        );
 
         // Division of (abs) values larger than ONE by ONE.
-        assert_eq!(div_by_one(10_000_000_001_i128), 10_000_000_001_i128 / one);
-        assert_eq!(div_by_one(-10_000_000_001_i128), -10_000_000_001_i128 / one);
-        assert_eq!(div_by_one(123_456_000_000_000), 123_456_000_000_000 / one);
-        assert_eq!(div_by_one(-123_456_000_000_000), -123_456_000_000_000 / one);
+        assert_eq!(
+            div_by_one(10_000_000_001_i128),
+            10_000_000_001_i128.checked_div(one).unwrap()
+        );
+        assert_eq!(
+            div_by_one(-10_000_000_001_i128),
+            (-10_000_000_001_i128).checked_div(one).unwrap()
+        );
+        assert_eq!(
+            div_by_one(123_456_000_000_000),
+            123_456_000_000_000_i128.checked_div(one).unwrap()
+        );
+        assert_eq!(
+            div_by_one(-123_456_000_000_000),
+            (-123_456_000_000_000_i128).checked_div(one).unwrap()
+        );
 
         // No overflow on MAX value, or values down to MIN + 1
-        assert_eq!(div_by_one(i128::MAX), i128::MAX / one);
+        assert_eq!(div_by_one(i128::MAX), i128::MAX.checked_div(one).unwrap());
         assert_eq!(div_by_one(i128::MIN + 1), (i128::MIN + 1) / one);
-    }
 
-    // Abs of i128::MIN panics
-    #[test]
-    #[should_panic = "overflow on abs operation"]
-    fn test_div_by_one_overflow() {
-        let one = 10_000_000_000_i128;
-        let answer = div_by_one(i128::MIN);
-        assert_eq!(answer, i128::MIN / one);
+        // No overflow on MIN value.
+        assert_eq!(div_by_one(i128::MIN), i128::MIN.checked_div(one).unwrap());
     }
 
     #[test]
