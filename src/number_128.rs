@@ -243,11 +243,17 @@ impl Neg for Number128 {
 ///
 /// Works for all i128 inputs except `i128::MIN`
 fn div_by_one(value: i128) -> i128 {
-    let abs_value = (value.checked_abs().unwrap() >> 10) / (9_765_625_i128);
+    let abs_value = value.abs();
+    // Checks if value if -1 after bit-shift of 127, indicating negative value after abs,
+    // and that overflow has occurred.
+    if (abs_value >> 127) == -1 {
+        panic!("overflow on abs operation")
+    }
+    let abs_result = (abs_value >> 10) / (9_765_625_i128);
     if value < 0 {
-        -abs_value
+        -abs_result
     } else {
-        abs_value
+        abs_result
     }
 }
 
@@ -262,8 +268,10 @@ const ONE_REPR_BITS: u32 = 34; // bits needed to represent ONE (excluding sign b
 /// Smallest supported input: `i128::MIN >> 35 = -2^93 ~= -9.9^27`
 fn mul_by_one(value: i128) -> i128 {
     // Check that sum of bits required to represent product does not exceed
-    // 128 bits. This is a conservative estimate, so it may return false positives
-    let left_bits = 128 - value.checked_abs().unwrap().leading_zeros();
+    // 128 bits. This is a conservative estimate, so it may return false positives.
+    // Note that checked_abs is not used here, since the overflow case would
+    // be caught by the following check.
+    let left_bits = 128 -  value.abs().leading_zeros();
     if (left_bits + ONE_REPR_BITS + 1) > 128 {
         panic!("Overflow in mul by one")
     }
@@ -280,8 +288,10 @@ fn fast_checked_mul(left: i128, right: i128) -> Option<i128> {
 
     // Convert values to positive first, as negative value always have no leading zeros.
     // Gets bits required to represent the absolute value, excluding the sign bit.
-    let left_bits = 128 - left.checked_abs().unwrap().leading_zeros();
-    let right_bits = 128 - right.checked_abs().unwrap().leading_zeros();
+    // Note that checked_abs is not used here, since the overflow case (for i128::MIN) 
+    // would be caught by the following bit check.
+    let left_bits = 128 - left.abs().leading_zeros();
+    let right_bits = 128 - right.abs().leading_zeros();
 
     // Assume that a conservative case that both right and left value have
     // ones for left_bits and right_bits respectively. Therefore, the product
@@ -402,6 +412,13 @@ mod tests {
     }
 
     #[test]
+    #[should_panic = "Overflow in mul by one"]
+    fn test_mul_by_one_overflow_min_i128() {
+        let one = 10_000_000_000_i128;
+        assert_eq!(mul_by_one(i128::MIN), i128::MIN * one);
+    }
+
+    #[test]
     fn test_div_by_one() {
         let one = 10_000_000_000_i128;
 
@@ -429,7 +446,7 @@ mod tests {
 
     // Abs of i128::MIN panics
     #[test]
-    #[should_panic = "called `Option::unwrap()` on a `None` value"]
+    #[should_panic = "overflow on abs operation"]
     fn test_div_by_one_overflow() {
         let one = 10_000_000_000_i128;
         let answer = div_by_one(i128::MIN);
@@ -449,8 +466,14 @@ mod tests {
             (2_000_000, 2_000_000),
             (i128::MAX >> 1, 1),
             (i128::MAX >> 2, 2),
+            (1, i128::MAX >> 1),
+            (2, i128::MAX >> 2),
             (3_000_000_000, 3_000_000_000), // both overflow
             (i128::MAX, 2),                 // both overflow
+            (2, i128::MAX),                 // both overflow
+            (i128::MIN, -1),                // both overflow
+            (-1, i128::MIN),                // both overflow
+            (i128::MIN, i128::MIN),         // both overflow
         ];
 
         for &(left, right) in &test_cases {
@@ -477,17 +500,6 @@ mod tests {
             let expected = left.checked_mul(right);
             assert_ne!(answer, expected);
         }
-    }
-
-    // Abs of i128::MIN panics
-    #[test]
-    #[should_panic = "called `Option::unwrap()` on a `None` value"]
-    fn test_fast_checked_mul_panics() {
-        let left = -1;
-        let right = i128::MIN;
-        let answer = fast_checked_mul(left, right);
-        let expected = left.checked_mul(right);
-        assert_eq!(answer, expected);
     }
 
     #[test]
