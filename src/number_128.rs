@@ -117,7 +117,7 @@ impl std::fmt::Display for Number128 {
         let rem = self.0 % ONE;
         let decimal_digits = PRECISION as usize;
         // convert to abs to remove sign
-        let rem_str = rem.abs().to_string();
+        let rem_str = rem.checked_abs().unwrap().to_string();
         // regular padding like {:010} doesn't work with i128
         let decimals = "0".repeat(decimal_digits - rem_str.len()) + &*rem_str;
         let stripped_decimals = decimals.trim_end_matches('0');
@@ -235,34 +235,41 @@ impl Neg for Number128 {
         Number128(-self.0)
     }
 }
-
-/// Divides value by ONE, which is `10_000_000_000_i128`. This is implemented
-/// as a right bit-shift (on absolute value) by 10, followed by a division by
-/// `9_765_625` (which is `5^10`), as this is faster than a division by `10_000_000_000`.
-/// The sign is then restored before returning the result.
-///
-/// Works for all i128 inputs except `i128::MIN`
+/// Divides value by ONE, which is `10_000_000_000_i128`. Supports all values from `i128::MIN` to `MAX`
 fn div_by_one(value: i128) -> i128 {
-    let abs_value = (value.abs() >> 10) / (9_765_625_i128);
-    if value < 0 {
-        -abs_value
+    // This is implemented as a right bit-shift (on absolute value) by 10,
+    // followed by a division by `9_765_625` (which is `5^10`), as this is faster
+    // than a division by `10_000_000_000`. The sign is then restored before returning the result.
+
+    // abs_result is expected to be positive unless
+    // value.abs() has overflowed when value == i128::MIN
+    let abs_result = (value.abs() >> 10) / (9_765_625_i128);
+
+    // Return result with sign of original value.
+    // Edge Case: For abs_result < 0, when value == i128::MIN, abs_result is the correct value
+    // without any sign change, as the overflow has already caused the sign to change.
+    if value > 0 || abs_result < 0 {
+        abs_result
     } else {
-        abs_value
+        -abs_result
     }
 }
 
 const ONE_REPR_BITS: u32 = 34; // bits needed to represent ONE (excluding sign bit)
 
 /// Multiplies value by ONE, which is `10_000_000_000_i128`.
-/// This is implemented as multiplication by `9_765_625` (which is `5^10`), followed by
-/// a left bit-shift by 10, as this is faster than a multiplication by `10_000_000_000`.
 ///
 /// Largest supported input: `i128::MAX >> 34 = 2^93 ~= 9.9^27`
 ///
 /// Smallest supported input: `i128::MIN >> 35 = -2^93 ~= -9.9^27`
 fn mul_by_one(value: i128) -> i128 {
+    // This is implemented as multiplication by `9_765_625` (which is `5^10`), followed by
+    // a left bit-shift by 10, as this is faster than a multiplication by `10_000_000_000`.
+
     // Check that sum of bits required to represent product does not exceed
-    // 128 bits. This is a conservative estimate, so it may return false positives
+    // 128 bits. This is a conservative estimate, so it may return false positives.
+    // Note that checked_abs is not used here, since the overflow case (i128::MIN) would
+    // be caught by the following check.
     let left_bits = 128 - value.abs().leading_zeros();
     if (left_bits + ONE_REPR_BITS + 1) > 128 {
         panic!("Overflow in mul by one")
@@ -280,6 +287,8 @@ fn fast_checked_mul(left: i128, right: i128) -> Option<i128> {
 
     // Convert values to positive first, as negative value always have no leading zeros.
     // Gets bits required to represent the absolute value, excluding the sign bit.
+    // Note that checked_abs is not used here, since the overflow case (for i128::MIN)
+    // would be caught by the following bit check.
     let left_bits = 128 - left.abs().leading_zeros();
     let right_bits = 128 - right.abs().leading_zeros();
 
@@ -402,38 +411,57 @@ mod tests {
     }
 
     #[test]
+    #[should_panic = "Overflow in mul by one"]
+    fn test_mul_by_one_overflow_min_i128() {
+        let one = 10_000_000_000_i128;
+        assert_eq!(mul_by_one(i128::MIN), i128::MIN * one);
+    }
+
+    #[test]
     fn test_div_by_one() {
         let one = 10_000_000_000_i128;
 
         // Division of ONE or -ONE by ONE
-        assert_eq!(div_by_one(one), one / one);
-        assert_eq!(div_by_one(-one), -one / one);
+        assert_eq!(div_by_one(one), one.checked_div(one).unwrap());
+        assert_eq!(div_by_one(-one), -one.checked_div(one).unwrap());
 
         // Division of (abs) values smaller than ONE by ONE.
-        assert_eq!(div_by_one(9_999_999_999_i128), 9_999_999_999_i128 / one);
-        assert_eq!(div_by_one(1), 1 / one);
+        assert_eq!(
+            div_by_one(9_999_999_999_i128),
+            9_999_999_999_i128.checked_div(one).unwrap()
+        );
+        assert_eq!(div_by_one(1), 1_i128.checked_div(one).unwrap());
         assert_eq!(div_by_one(0), 0);
-        assert_eq!(div_by_one(-1), -1 / one);
-        assert_eq!(div_by_one(-9_999_999_999_i128), -9_999_999_999_i128 / one);
+        assert_eq!(div_by_one(-1), -1_i128.checked_div(one).unwrap());
+        assert_eq!(
+            div_by_one(-9_999_999_999_i128),
+            -9_999_999_999_i128.checked_div(one).unwrap()
+        );
 
         // Division of (abs) values larger than ONE by ONE.
-        assert_eq!(div_by_one(10_000_000_001_i128), 10_000_000_001_i128 / one);
-        assert_eq!(div_by_one(-10_000_000_001_i128), -10_000_000_001_i128 / one);
-        assert_eq!(div_by_one(123_456_000_000_000), 123_456_000_000_000 / one);
-        assert_eq!(div_by_one(-123_456_000_000_000), -123_456_000_000_000 / one);
+        assert_eq!(
+            div_by_one(10_000_000_001_i128),
+            10_000_000_001_i128.checked_div(one).unwrap()
+        );
+        assert_eq!(
+            div_by_one(-10_000_000_001_i128),
+            (-10_000_000_001_i128).checked_div(one).unwrap()
+        );
+        assert_eq!(
+            div_by_one(123_456_000_000_000),
+            123_456_000_000_000_i128.checked_div(one).unwrap()
+        );
+        assert_eq!(
+            div_by_one(-123_456_000_000_000),
+            (-123_456_000_000_000_i128).checked_div(one).unwrap()
+        );
 
-        // No overflow on MAX value, or values down to MIN + 1
-        assert_eq!(div_by_one(i128::MAX), i128::MAX / one);
+        // No overflow on MAX value
+        assert_eq!(div_by_one(i128::MAX), i128::MAX.checked_div(one).unwrap());
+
+        // No overflow on MIN value.
+        assert_eq!(div_by_one(i128::MIN), i128::MIN.checked_div(one).unwrap());
         assert_eq!(div_by_one(i128::MIN + 1), (i128::MIN + 1) / one);
-    }
-
-    // Abs of i128::MIN panics
-    #[test]
-    #[should_panic = "attempt to negate with overflow"]
-    fn test_div_by_one_overflow() {
-        let one = 10_000_000_000_i128;
-        let answer = div_by_one(i128::MIN);
-        assert_eq!(answer, i128::MIN / one);
     }
 
     #[test]
@@ -449,8 +477,14 @@ mod tests {
             (2_000_000, 2_000_000),
             (i128::MAX >> 1, 1),
             (i128::MAX >> 2, 2),
+            (1, i128::MAX >> 1),
+            (2, i128::MAX >> 2),
             (3_000_000_000, 3_000_000_000), // both overflow
             (i128::MAX, 2),                 // both overflow
+            (2, i128::MAX),                 // both overflow
+            (i128::MIN, -1),                // both overflow
+            (-1, i128::MIN),                // both overflow
+            (i128::MIN, i128::MIN),         // both overflow
         ];
 
         for &(left, right) in &test_cases {
@@ -462,13 +496,14 @@ mod tests {
 
     #[test]
     fn test_fast_checked_failures() {
+        // Test cases when fast_checked_mul detects false positives
+        // and expects overflow, even when checked_mul does not.
         let test_cases = [
-            (i128::MAX, 1), // only fast mul overflows
-            (i128::MAX >> 1, 2), // only fast mul overflows
-            (i128::MAX >> 2, 4), // only fast mul overflows
-            (i128::MAX >> 3, 8), // only fast mul overflows
-            // ... etc
-            (i128::MIN + 1, 1), // only fast mul overflows
+            (i128::MAX, 1),
+            (i128::MAX >> 1, 2),
+            (i128::MAX >> 2, 4),
+            (i128::MAX >> 3, 8),
+            (i128::MIN + 1, 1),
         ];
 
         for &(left, right) in &test_cases {
@@ -476,17 +511,6 @@ mod tests {
             let expected = left.checked_mul(right);
             assert_ne!(answer, expected);
         }
-    }
-
-    // Abs of i128::MIN panics
-    #[test]
-    #[should_panic = "attempt to negate with overflow"]
-    fn test_fast_checked_mul_panics() {
-        let left = -1;
-        let right = i128::MIN;
-        let answer = fast_checked_mul(left, right);
-        let expected = left.checked_mul(right);
-        assert_eq!(answer, expected);
     }
 
     #[test]
