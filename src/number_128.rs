@@ -235,19 +235,19 @@ impl Neg for Number128 {
         Number128(-self.0)
     }
 }
-
-/// Divides value by ONE, which is `10_000_000_000_i128`. This is implemented
-/// as a right bit-shift (on absolute value) by 10, followed by a division by
-/// `9_765_625` (which is `5^10`), as this is faster than a division by `10_000_000_000`.
-/// The sign is then restored before returning the result.
+/// Divides value by ONE, which is `10_000_000_000_i128`. Supports all values from `i128::MIN` to `MAX`
 fn div_by_one(value: i128) -> i128 {
+    // This is implemented as a right bit-shift (on absolute value) by 10,
+    // followed by a division by `9_765_625` (which is `5^10`), as this is faster
+    // than a division by `10_000_000_000`. The sign is then restored before returning the result.
+
     // abs_result is expected to be positive unless
     // value.abs() has overflowed when value == i128::MIN
     let abs_result = (value.abs() >> 10) / (9_765_625_i128);
 
-    // Return result with sign of value.
-    // For abs_result < 0, when value == i128::MIN, abs_result is the correct value
-    // without any sign change.
+    // Return result with sign of original value.
+    // Edge Case: For abs_result < 0, when value == i128::MIN, abs_result is the correct value
+    // without any sign change, as the overflow has already caused the sign to change.
     if value > 0 || abs_result < 0 {
         abs_result
     } else {
@@ -258,16 +258,17 @@ fn div_by_one(value: i128) -> i128 {
 const ONE_REPR_BITS: u32 = 34; // bits needed to represent ONE (excluding sign bit)
 
 /// Multiplies value by ONE, which is `10_000_000_000_i128`.
-/// This is implemented as multiplication by `9_765_625` (which is `5^10`), followed by
-/// a left bit-shift by 10, as this is faster than a multiplication by `10_000_000_000`.
 ///
 /// Largest supported input: `i128::MAX >> 34 = 2^93 ~= 9.9^27`
 ///
 /// Smallest supported input: `i128::MIN >> 35 = -2^93 ~= -9.9^27`
 fn mul_by_one(value: i128) -> i128 {
+    // This is implemented as multiplication by `9_765_625` (which is `5^10`), followed by
+    // a left bit-shift by 10, as this is faster than a multiplication by `10_000_000_000`.
+
     // Check that sum of bits required to represent product does not exceed
     // 128 bits. This is a conservative estimate, so it may return false positives.
-    // Note that checked_abs is not used here, since the overflow case would
+    // Note that checked_abs is not used here, since the overflow case (i128::MIN) would
     // be caught by the following check.
     let left_bits = 128 - value.abs().leading_zeros();
     if (left_bits + ONE_REPR_BITS + 1) > 128 {
@@ -455,12 +456,12 @@ mod tests {
             (-123_456_000_000_000_i128).checked_div(one).unwrap()
         );
 
-        // No overflow on MAX value, or values down to MIN + 1
+        // No overflow on MAX value
         assert_eq!(div_by_one(i128::MAX), i128::MAX.checked_div(one).unwrap());
-        assert_eq!(div_by_one(i128::MIN + 1), (i128::MIN + 1) / one);
 
         // No overflow on MIN value.
         assert_eq!(div_by_one(i128::MIN), i128::MIN.checked_div(one).unwrap());
+        assert_eq!(div_by_one(i128::MIN + 1), (i128::MIN + 1) / one);
     }
 
     #[test]
